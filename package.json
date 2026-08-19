@@ -1,7 +1,7 @@
 {
-  "name": "discord-connector-plugin",
-  "version": "0.1.0",
-  "description": "Claude Code plugin: MCP server that connects to Discord for community/channel management.",
+  "name": "discord-connector",
+  "version": "0.2.0",
+  "description": "Remote MCP connector for Discord community/channel management.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "discord.js": "^14.16.3",
+    "express": "^4.21.0",
     "zod": "^3.23.8"
   },
   "engines": {
