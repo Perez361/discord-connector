@@ -1,0 +1,9 @@
+{
+  "name": "discord-connector",
+  "version": "0.1.0",
+  "description": "Connects Claude Code to a Discord server so it can help with community management: channel settings, permissions, roles, and moderation housekeeping.",
+  "author": {
+    "name": "kwamepersie360"
+  },
+  "keywords": ["discord", "community-management", "mcp", "channels", "moderation"]
+}
