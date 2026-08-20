@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerChannelTools } from "./tools/channels.js";
 import { registerGuildTools } from "./tools/guilds.js";
+import { registerOAuthRoutes, isValidAccessToken } from "./oauth.js";
 
 function buildServer() {
   const server = new McpServer({ name: "discord-connector", version: "0.2.0" });
@@ -12,10 +13,21 @@ function buildServer() {
   return server;
 }
 
+// Accepts either the static CONNECTOR_API_KEY directly (handy for a manually
+// configured header, e.g. Claude Code's .mcp.json) or a token issued through
+// the OAuth flow below (what claude.ai's "Add custom connector" dialog uses,
+// since it only takes a URL and drives OAuth discovery itself).
 function requireAuth(req, res, next) {
   const apiKey = process.env.CONNECTOR_API_KEY;
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
   if (!apiKey) return next();
-  if (req.headers.authorization === `Bearer ${apiKey}`) return next();
+  if (token && (token === apiKey || isValidAccessToken(token))) return next();
+
+  const proto = req.headers["x-forwarded-proto"] || req.protocol;
+  const base = process.env.PUBLIC_URL?.replace(/\/$/, "") || `${proto}://${req.get("host")}`;
+  res.set("WWW-Authenticate", `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`);
   res.status(401).json({
     jsonrpc: "2.0",
     error: { code: -32001, message: "Unauthorized" },
@@ -25,6 +37,8 @@ function requireAuth(req, res, next) {
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+registerOAuthRoutes(app);
 
 // Stateless mode: a fresh McpServer + transport per request. Simple to run,
 // scales horizontally, and needs no session storage — fine for a tool-call

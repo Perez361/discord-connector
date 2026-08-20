@@ -55,14 +55,36 @@ on that host; don't bake them into the image.
 
 ## 4. Add it to Claude
 
-In Claude (claude.ai Settings → Connectors, or Claude Code's connector
-config), add a custom connector:
+**claude.ai → Settings → Connectors → Add custom connector**: paste just the
+URL, `https://<your-host>/mcp`, and click Add. That dialog only takes a URL
+(plus optional OAuth client fields) — no header field — so the server
+implements the standard MCP OAuth flow itself: Claude discovers the
+`/.well-known/oauth-*` endpoints, dynamically registers itself as a client,
+and redirects you to a login page on your own server where you enter your
+`CONNECTOR_API_KEY` once to authorize it. From then on Claude holds an
+issued access token (auto-refreshed), not your raw key.
 
-- **URL**: `https://<your-host>/mcp`
-- **Auth**: send `Authorization: Bearer <CONNECTOR_API_KEY>` as a custom
-  header (exact UI depends on where you're adding it).
+**Claude Code's `.mcp.json`**, or anything else that lets you set a raw
+header, can skip OAuth entirely and send the static key directly:
 
-Once connected, Claude has access to the `discord_*` tools below.
+```json
+{
+  "mcpServers": {
+    "discord": {
+      "type": "http",
+      "url": "https://<your-host>/mcp",
+      "headers": { "Authorization": "Bearer <CONNECTOR_API_KEY>" }
+    }
+  }
+}
+```
+
+Either way, once connected Claude has access to the `discord_*` tools below.
+
+Set `PUBLIC_URL` (e.g. `https://discord-connector.onrender.com`) as an env
+var on your host — the OAuth endpoints need to advertise absolute URLs, and
+while the server will guess one from request headers if it's unset, an
+explicit value is more reliable behind some proxies.
 
 ## Available tools
 
