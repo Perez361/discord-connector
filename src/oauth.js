@@ -1,15 +1,19 @@
 import crypto from "node:crypto";
 
-// In-memory stores. Fine for a single-instance personal connector — a process
-// restart just means users re-authorize once, same as any expired session.
-const clients = new Map(); // client_id -> { redirectUris }
+// authCodes is in-memory and short-lived (5 min) by design — a restart
+// mid-login just means retrying the login form, which is rare and cheap.
+//
+// Access/refresh tokens are deliberately NOT random values stored in memory:
+// this runs on hosts (e.g. Render's free tier) that restart the process on
+// every redeploy and after any idle period, which would silently wipe an
+// in-memory token store and break the connector until the user manually
+// reauthorized. Instead, once a login is validated, we hand back the
+// CONNECTOR_API_KEY itself as the token — validating it is then a pure
+// string comparison against the env var, so it survives restarts for free.
 const authCodes = new Map(); // code -> { redirectUri, codeChallenge, expiresAt }
-const accessTokens = new Map(); // token -> expiresAt
-const refreshTokens = new Map(); // token -> expiresAt
 
 const CODE_TTL_MS = 5 * 60 * 1000;
 const ACCESS_TOKEN_TTL_S = 60 * 60 * 24 * 30;
-const REFRESH_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 365;
 
 function randomToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("hex");
@@ -23,28 +27,6 @@ function verifyPkce(verifier, challenge) {
   if (!verifier || !challenge) return false;
   const hash = crypto.createHash("sha256").update(verifier).digest();
   return base64url(hash) === challenge;
-}
-
-export function isValidAccessToken(token) {
-  const expiresAt = accessTokens.get(token);
-  if (!expiresAt) return false;
-  if (Date.now() > expiresAt) {
-    accessTokens.delete(token);
-    return false;
-  }
-  return true;
-}
-
-function issueAccessToken() {
-  const token = randomToken();
-  accessTokens.set(token, Date.now() + ACCESS_TOKEN_TTL_S * 1000);
-  return token;
-}
-
-function issueRefreshToken() {
-  const token = randomToken();
-  refreshTokens.set(token, Date.now() + REFRESH_TOKEN_TTL_MS);
-  return token;
 }
 
 function baseUrl(req) {
@@ -115,8 +97,11 @@ export function registerOAuthRoutes(app) {
         .status(400)
         .json({ error: "invalid_client_metadata", error_description: "redirect_uris is required" });
     }
+    // Not persisted: redirect_uri is re-validated against the auth code at
+    // token-exchange time anyway, so there's nothing meaningful to look up
+    // a stored client record for, and skipping storage removes another
+    // thing a process restart could otherwise wipe.
     const clientId = randomToken(16);
-    clients.set(clientId, { redirectUris });
     res.status(201).json({
       client_id: clientId,
       client_id_issued_at: Math.floor(Date.now() / 1000),
@@ -195,22 +180,22 @@ export function registerOAuthRoutes(app) {
       if (!verifyPkce(code_verifier, entry.codeChallenge)) {
         return res.status(400).json({ error: "invalid_grant", error_description: "PKCE verification failed" });
       }
+      const apiKey = process.env.CONNECTOR_API_KEY || "dev-mode-no-key-configured";
       return res.json({
-        access_token: issueAccessToken(),
+        access_token: apiKey,
         token_type: "Bearer",
         expires_in: ACCESS_TOKEN_TTL_S,
-        refresh_token: issueRefreshToken(),
+        refresh_token: apiKey,
       });
     }
 
     if (grantType === "refresh_token") {
-      const refreshToken = req.body?.refresh_token;
-      const expiresAt = refreshTokens.get(refreshToken);
-      if (!expiresAt || Date.now() > expiresAt) {
+      const apiKey = process.env.CONNECTOR_API_KEY || "dev-mode-no-key-configured";
+      if (req.body?.refresh_token !== apiKey) {
         return res.status(400).json({ error: "invalid_grant" });
       }
       return res.json({
-        access_token: issueAccessToken(),
+        access_token: apiKey,
         token_type: "Bearer",
         expires_in: ACCESS_TOKEN_TTL_S,
       });

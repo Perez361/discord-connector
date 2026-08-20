@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerChannelTools } from "./tools/channels.js";
 import { registerGuildTools } from "./tools/guilds.js";
-import { registerOAuthRoutes, isValidAccessToken } from "./oauth.js";
+import { registerOAuthRoutes } from "./oauth.js";
 
 function buildServer() {
   const server = new McpServer({ name: "discord-connector", version: "0.2.0" });
@@ -13,17 +13,17 @@ function buildServer() {
   return server;
 }
 
-// Accepts either the static CONNECTOR_API_KEY directly (handy for a manually
-// configured header, e.g. Claude Code's .mcp.json) or a token issued through
-// the OAuth flow below (what claude.ai's "Add custom connector" dialog uses,
-// since it only takes a URL and drives OAuth discovery itself).
+// The OAuth flow in oauth.js always hands back CONNECTOR_API_KEY itself as
+// the token (see the comment there for why), so a manually configured header
+// (e.g. Claude Code's .mcp.json) and a token obtained via claude.ai's OAuth
+// dance both end up as the exact same value here — one plain comparison.
 function requireAuth(req, res, next) {
   const apiKey = process.env.CONNECTOR_API_KEY;
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   if (!apiKey) return next();
-  if (token && (token === apiKey || isValidAccessToken(token))) return next();
+  if (token === apiKey) return next();
 
   const proto = req.headers["x-forwarded-proto"] || req.protocol;
   const base = process.env.PUBLIC_URL?.replace(/\/$/, "") || `${proto}://${req.get("host")}`;
