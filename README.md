@@ -100,6 +100,8 @@ explicit value is more reliable behind some proxies.
 | `discord_update_role` | Edit a role's name/color/permissions |
 | `discord_set_channel_permission` | Set an allow/deny permission overwrite for a role/user on a channel |
 | `discord_set_channel_lock` | Fast lock/unlock a channel for @everyone |
+| `discord_send_message` | Post a message to a text channel, optionally pinning it |
+| `discord_pin_message` | Pin an existing message |
 
 ## Notes
 
