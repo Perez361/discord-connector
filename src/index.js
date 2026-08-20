@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { registerChannelTools } from "./tools/channels.js";
 import { registerGuildTools } from "./tools/guilds.js";
 import { registerOAuthRoutes } from "./oauth.js";
+import { getDiscordClient } from "./discordClient.js";
 
 function buildServer() {
   const server = new McpServer({ name: "discord-connector", version: "0.2.0" });
@@ -86,5 +87,15 @@ app.listen(port, () => {
       "WARNING: CONNECTOR_API_KEY is not set — /mcp is unauthenticated. " +
         "Set it before exposing this server publicly."
     );
+  }
+
+  // Start the (sometimes slow, observed up to ~200s on a cold free-tier
+  // host) Discord gateway login now rather than waiting for the first tool
+  // call, so a request that arrives after the server's been up a while
+  // finds an already-warm client instead of paying that latency itself.
+  if (process.env.DISCORD_BOT_TOKEN) {
+    getDiscordClient()
+      .then(() => console.log("Discord client ready."))
+      .catch((err) => console.error("Discord client failed to connect on startup:", err.message));
   }
 });
