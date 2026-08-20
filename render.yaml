@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: discord-connector
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: CONNECTOR_API_KEY
+        sync: false
+      - key: NODE_VERSION
+        value: 20.17.0
