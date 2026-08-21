@@ -5,14 +5,18 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { registerChannelTools } from "./tools/channels.js";
 import { registerGuildTools } from "./tools/guilds.js";
 import { registerMessageTools } from "./tools/messages.js";
+import { registerMemberTools } from "./tools/members.js";
+import { registerEventTools } from "./tools/events.js";
 import { registerOAuthRoutes } from "./oauth.js";
 import { getDiscordClient } from "./discordClient.js";
 
 function buildServer() {
-  const server = new McpServer({ name: "discord-connector", version: "0.3.0" });
+  const server = new McpServer({ name: "discord-connector", version: "0.4.0" });
   registerGuildTools(server);
   registerChannelTools(server);
   registerMessageTools(server);
+  registerMemberTools(server);
+  registerEventTools(server);
   return server;
 }
 

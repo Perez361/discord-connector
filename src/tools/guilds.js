@@ -114,4 +114,21 @@ export function registerGuildTools(server) {
       return ok(summarizeRole(updated));
     }
   );
+
+  server.tool(
+    "discord_set_role_position",
+    "Change a role's position in the hierarchy. Higher numbers rank above lower ones (position 1 is just above @everyone).",
+    {
+      guildId: z.string(),
+      roleId: z.string(),
+      position: z.number().int().min(1),
+    },
+    async ({ guildId, roleId, position }) => {
+      const guild = await getGuild(guildId);
+      const role = await guild.roles.fetch(roleId);
+      if (!role) throw new Error(`Role ${roleId} not found in guild ${guildId}`);
+      const updated = await role.setPosition(position);
+      return ok(summarizeRole(updated));
+    }
+  );
 }

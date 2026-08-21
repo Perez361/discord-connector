@@ -102,11 +102,29 @@ explicit value is more reliable behind some proxies.
 | `discord_set_channel_lock` | Fast lock/unlock a channel for @everyone |
 | `discord_send_message` | Post a message to a text channel, optionally pinning it |
 | `discord_pin_message` | Pin an existing message |
+| `discord_add_reaction` | Add a reaction emoji to a message |
+| `discord_purge_messages` | Bulk-delete recent messages in a channel |
+| `discord_set_role_position` | Change a role's position in the hierarchy |
+| `discord_list_members` | List server members and their roles |
+| `discord_assign_role` | Add a role to a member |
+| `discord_remove_role` | Remove a role from a member |
+| `discord_kick_member` | Kick a member |
+| `discord_ban_member` | Ban a member, optionally deleting recent messages |
+| `discord_timeout_member` | Temporarily mute/timeout a member |
+| `discord_remove_timeout` | Clear an active timeout early |
+| `discord_create_event` | Create a Discord Server Event (RSVP + reminders) |
+| `discord_list_events` | List upcoming/active Server Events |
 
 ## Notes
 
-- The bot only needs `Manage Channels` and `Manage Roles` for the tasks above
-  — avoid granting `Administrator`.
+- Discord only lets a role grant permissions the *granting* role itself
+  holds — a bot role with just `Manage Channels`/`Manage Roles` will fail
+  ("Missing Permissions") the moment it tries to configure a moderator role
+  with things like `Kick Members` or `Ban Members`, and can get "Missing
+  Access" errors on channels it can't itself see. In practice, granting the
+  bot's role `Administrator` is the simplest way to avoid both — reasonable
+  for a personal automation bot you control, less so if you'd hand this
+  connector's key to people you don't fully trust.
 - `CONNECTOR_API_KEY` is a single shared secret, not per-user OAuth — anyone
   holding it can act as the Discord bot through this connector. Treat it like
   a credential (rotate it if it leaks, don't log it, don't commit `.env`).
