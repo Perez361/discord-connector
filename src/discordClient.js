@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from "discord.js";
+import { Client, GatewayIntentBits, Partials } from "discord.js";
 
 let clientPromise = null;
 
@@ -19,7 +19,16 @@ export function getDiscordClient() {
   }
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildMessageReactions,
+    ],
+    // Lets reaction/message events resolve even when the underlying message
+    // wasn't already in cache (e.g. a reaction on a message from before this
+    // process started) — needed for the auto-verify listener in autoVerify.js.
+    partials: [Partials.Message, Partials.Reaction, Partials.Channel],
   });
 
   // Without a timeout, a gateway connection that never fires "ready" (bad

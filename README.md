@@ -115,6 +115,29 @@ explicit value is more reliable behind some proxies.
 | `discord_create_event` | Create a Discord Server Event (RSVP + reminders) |
 | `discord_list_events` | List upcoming/active Server Events |
 
+## Auto-verify (optional)
+
+A background listener — separate from the `discord_*` tools, always running
+on the same live connection — that automatically grants a role once a member
+has both reacted to your rules message and posted in an introductions
+channel. Set all four env vars to enable it:
+
+```
+AUTO_VERIFY_GUILD_ID=<your server ID>
+AUTO_VERIFY_RULES_CHANNEL_ID=<#rules channel ID>
+AUTO_VERIFY_INTRO_CHANNEL_ID=<#introductions channel ID>
+AUTO_VERIFY_ROLE_ID=<role ID to grant, e.g. Verified Player>
+AUTO_VERIFY_EMOJI=✅   # optional, defaults to ✅
+```
+
+It reconciles from Discord's own history on every boot (existing reactions
+on the pinned rules message + the last 100 introductions messages) before
+relying on live events, so a restart doesn't lose members who already
+completed one step — though a member who reacted, then the process
+restarted, then posted their intro *after* that window, would need to react
+again if their reaction fell outside what got reconciled. In-memory only, no
+database.
+
 ## Notes
 
 - Discord only lets a role grant permissions the *granting* role itself

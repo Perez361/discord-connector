@@ -9,6 +9,7 @@ import { registerMemberTools } from "./tools/members.js";
 import { registerEventTools } from "./tools/events.js";
 import { registerOAuthRoutes } from "./oauth.js";
 import { getDiscordClient } from "./discordClient.js";
+import { initAutoVerify } from "./autoVerify.js";
 
 function buildServer() {
   const server = new McpServer({ name: "discord-connector", version: "0.4.0" });
@@ -101,7 +102,10 @@ app.listen(port, () => {
   // finds an already-warm client instead of paying that latency itself.
   if (process.env.DISCORD_BOT_TOKEN) {
     getDiscordClient()
-      .then(() => console.log("Discord client ready."))
+      .then((client) => {
+        console.log("Discord client ready.");
+        return initAutoVerify(client);
+      })
       .catch((err) => console.error("Discord client failed to connect on startup:", err.message));
   }
 });
