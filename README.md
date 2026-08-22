@@ -135,6 +135,124 @@ doesn't miss anyone who reacted while the process was down. No database —
 every grant checks the member's live role list on Discord first, so there's
 no in-memory progress to lose.
 
+## Standings webhook (optional)
+
+Lets an external caller push tournament standings into a Discord channel —
+built for a Google Apps Script trigger on a leaderboard Sheet, so entering a
+match result there updates the channel automatically with no manual step and
+no Discord tool call needed. Separate from the OAuth-protected `/mcp`
+endpoint: this one is a plain `POST /webhooks/standings` guarded by its own
+shared secret.
+
+Set both env vars to enable it:
+
+```
+STANDINGS_WEBHOOK_SECRET=<generate with: openssl rand -hex 24>
+STANDINGS_CHANNEL_ID=<#channel ID to post standings into>
+```
+
+Expected request:
+
+```
+POST /webhooks/standings
+X-Webhook-Secret: <STANDINGS_WEBHOOK_SECRET>
+Content-Type: application/json
+
+{
+  "groups": [
+    { "group": "A", "rows": [
+      { "rank": 1, "player": "PlayerName", "played": 3, "won": 3, "lost": 0, "gf": 9, "ga": 2, "gd": 7, "points": 9 }
+    ] }
+  ],
+  "thirdPlace": [
+    { "rank": 1, "group": "A", "player": "PlayerName", "played": 3, "won": 2, "lost": 1, "gf": 6, "ga": 4, "gd": 2, "points": 7 }
+  ]
+}
+```
+
+For each group (and third-place ranking, if present) it posts one message
+as a monospace table under a heading like `## Group A — Standings`. On the
+next call it looks for an existing bot message starting with that same
+heading in the last 50 messages of the channel and **edits it in place**
+instead of posting a new one — so repeated edits to the Sheet update the
+same messages rather than spamming the channel.
+
+### Wiring it to the leaderboard Sheet
+
+In the Sheet: **Extensions → Apps Script**, replace the contents with:
+
+```javascript
+const WEBHOOK_URL = "https://<your-host>/webhooks/standings";
+const WEBHOOK_SECRET = "<same value as STANDINGS_WEBHOOK_SECRET>";
+
+function readTable_(sheetName, headerMap) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(sheetName);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const idx = {};
+  for (const key in headerMap) idx[key] = headers.indexOf(headerMap[key]);
+  return values.slice(1)
+    .filter((row) => row[idx.player])
+    .map((row) => {
+      const out = {};
+      for (const key in idx) out[key] = row[idx[key]];
+      return out;
+    });
+}
+
+function sendStandingsUpdate() {
+  const standings = readTable_("Standings", {
+    group: "Group", rank: "Rank", player: "Player", played: "Played",
+    won: "Won", lost: "Lost", gf: "GF", ga: "GA", gd: "GD", points: "Points",
+  });
+
+  const groupsMap = {};
+  standings.forEach((row) => {
+    if (!groupsMap[row.group]) groupsMap[row.group] = [];
+    groupsMap[row.group].push(row);
+  });
+  const groups = Object.keys(groupsMap).sort().map((group) => ({
+    group, rows: groupsMap[group].sort((a, b) => a.rank - b.rank),
+  }));
+
+  const thirdPlace = readTable_("Third-Place Ranking", {
+    rank: "Overall Rank", group: "Group", player: "Player", played: "Played",
+    won: "Won", lost: "Lost", gf: "GF", ga: "GA", gd: "GD", points: "Points",
+  }).sort((a, b) => a.rank - b.rank);
+
+  const res = UrlFetchApp.fetch(WEBHOOK_URL, {
+    method: "post",
+    contentType: "application/json",
+    headers: { "X-Webhook-Secret": WEBHOOK_SECRET },
+    payload: JSON.stringify({ groups, thirdPlace }),
+    muteHttpExceptions: true,
+  });
+  Logger.log(res.getContentText());
+}
+
+function onMatchResultsEdit(e) {
+  if (e.range.getSheet().getName() !== "Match Results") return;
+  sendStandingsUpdate();
+}
+
+// Run this once manually from the Apps Script editor (Run ▶ createTrigger)
+// to install the installable trigger — a simple onEdit(e) can't make
+// external HTTP calls, this is the one-time setup that grants it that.
+function createTrigger() {
+  ScriptApp.newTrigger("onMatchResultsEdit")
+    .forSpreadsheet(SpreadsheetApp.getActive())
+    .onEdit()
+    .create();
+}
+```
+
+Then: fill in `WEBHOOK_URL`/`WEBHOOK_SECRET`, save, select `createTrigger` in
+the function dropdown and click **Run** once — Google will prompt you to
+authorize the script (it needs to read the Sheet and call an external URL),
+approve it, and you're done. From then on, editing any cell in `Match
+Results` recomputes the formulas and pushes the refreshed standings to
+Discord within a few seconds, with nothing for you to do by hand.
+
 ## Notes
 
 - Discord only lets a role grant permissions the *granting* role itself

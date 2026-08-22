@@ -8,6 +8,7 @@ import { registerMessageTools } from "./tools/messages.js";
 import { registerMemberTools } from "./tools/members.js";
 import { registerEventTools } from "./tools/events.js";
 import { registerOAuthRoutes } from "./oauth.js";
+import { registerStandingsWebhook } from "./webhooks/standings.js";
 import { getDiscordClient } from "./discordClient.js";
 import { initAutoVerify } from "./autoVerify.js";
 
@@ -47,6 +48,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 registerOAuthRoutes(app);
+registerStandingsWebhook(app);
 
 // Stateless mode: a fresh McpServer + transport per request. Simple to run,
 // scales horizontally, and needs no session storage — fine for a tool-call
