@@ -144,11 +144,14 @@ no Discord tool call needed. Separate from the OAuth-protected `/mcp`
 endpoint: this one is a plain `POST /webhooks/standings` guarded by its own
 shared secret.
 
-Set both env vars to enable it:
+`STANDINGS_WEBHOOK_SECRET` is required for the endpoint to respond at all.
+Each channel ID is independent and optional — leave one unset to skip that
+section of the payload:
 
 ```
 STANDINGS_WEBHOOK_SECRET=<generate with: openssl rand -hex 24>
-STANDINGS_CHANNEL_ID=<#channel ID to post standings into>
+STANDINGS_CHANNEL_ID=<#channel ID for per-group standings + best third-place ranking>
+OVERALL_CHANNEL_ID=<#channel ID for the all-players overall leaderboard, if you post one — often a different channel>
 ```
 
 Expected request:
@@ -166,16 +169,23 @@ Content-Type: application/json
   ],
   "thirdPlace": [
     { "rank": 1, "group": "A", "player": "PlayerName", "played": 3, "won": 2, "lost": 1, "gf": 6, "ga": 4, "gd": 2, "points": 7 }
+  ],
+  "overall": [
+    { "rank": 1, "player": "PlayerName", "group": "A", "played": 3, "won": 3, "lost": 0, "gf": 9, "ga": 2, "gd": 7, "points": 9 }
   ]
 }
 ```
 
-For each group (and third-place ranking, if present) it posts one message
-as a monospace table under a heading like `## Group A — Standings`. On the
+For each group, the third-place ranking (if present), and the overall
+leaderboard (if present) it posts one message as a monospace table under a
+heading like `## Group A — Standings` or `## Overall Leaderboard`. On the
 next call it looks for an existing bot message starting with that same
 heading in the last 50 messages of the channel and **edits it in place**
 instead of posting a new one — so repeated edits to the Sheet update the
-same messages rather than spamming the channel.
+same messages rather than spamming the channel. `groups`/`thirdPlace` post
+to `STANDINGS_CHANNEL_ID`, `overall` posts to `OVERALL_CHANNEL_ID` — a
+section is silently skipped (reported in the response as `skipped: true`)
+if its channel ID isn't configured.
 
 ### Wiring it to the leaderboard Sheet
 
@@ -215,8 +225,17 @@ function sendStandingsUpdate() {
     group, rows: groupsMap[group].sort((a, b) => a.rank - b.rank),
   }));
 
+  // Third-Place Ranking has a raw per-group helper block below the real
+  // table (same sheet) — its rows have text like "A" where a number is
+  // expected here, so filtering to numeric ranks drops them regardless of
+  // how many groups you have, without hardcoding a row count.
   const thirdPlace = readTable_("Third-Place Ranking", {
-    rank: "Overall Rank", group: "Group", player: "Player", played: "Played",
+    rank: "Rank", group: "Group", player: "Player", played: "Played",
+    won: "Won", lost: "Lost", gf: "GF", ga: "GA", gd: "GD", points: "Points",
+  }).filter((row) => typeof row.rank === "number").sort((a, b) => a.rank - b.rank);
+
+  const overall = readTable_("Overall Leaderboard", {
+    rank: "Rank", player: "Player", group: "Group", played: "Played",
     won: "Won", lost: "Lost", gf: "GF", ga: "GA", gd: "GD", points: "Points",
   }).sort((a, b) => a.rank - b.rank);
 
@@ -224,7 +243,7 @@ function sendStandingsUpdate() {
     method: "post",
     contentType: "application/json",
     headers: { "X-Webhook-Secret": WEBHOOK_SECRET },
-    payload: JSON.stringify({ groups, thirdPlace }),
+    payload: JSON.stringify({ groups, thirdPlace, overall }),
     muteHttpExceptions: true,
   });
   Logger.log(res.getContentText());

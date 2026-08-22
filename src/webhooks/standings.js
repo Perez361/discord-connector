@@ -1,18 +1,21 @@
 // Receives a POST from a Google Apps Script trigger bound to the leaderboard
 // Sheet every time it's edited, and posts/edits Discord messages with the
-// current group standings + third-place ranking. No Google credentials live
-// here — the Sheet already computes the tables via formulas, Apps Script
-// just reads the cell values and pushes them over.
+// current group standings, third-place ranking, and overall leaderboard. No
+// Google credentials live here — the Sheet already computes the tables via
+// formulas, Apps Script just reads the cell values and pushes them over.
 //
 // Each table is upserted, not reposted: the handler looks for an existing
 // message from the bot whose content starts with that table's heading and
 // edits it in place, so repeated edits to the same match don't spam the
-// channel with a new message every time.
+// channel with a new message every time. Groups + third-place post to
+// STANDINGS_CHANNEL_ID; the overall leaderboard (all players ranked
+// together) posts to OVERALL_CHANNEL_ID, since it's commonly a different
+// channel — either can be left unset to skip that section.
 
 import { getDiscordClient } from "../discordClient.js";
 
 const COLS = ["Rank", "Player", "P", "W", "L", "GF", "GA", "GD", "Pts"];
-const WIDTHS = [4, 18, 3, 3, 3, 4, 4, 4, 4];
+const WIDTHS = [4, 20, 3, 3, 3, 4, 4, 4, 4];
 
 function pad(value, width) {
   const str = String(value ?? "");
@@ -34,12 +37,17 @@ function buildSections(payload) {
   const sections = [];
   for (const g of payload.groups || []) {
     const heading = `## Group ${g.group} — Standings`;
-    sections.push({ heading, content: `${heading}\n${renderTable(g.rows || [])}` });
+    sections.push({ heading, content: `${heading}\n${renderTable(g.rows || [])}`, channelEnv: "STANDINGS_CHANNEL_ID" });
   }
   if (Array.isArray(payload.thirdPlace) && payload.thirdPlace.length > 0) {
     const heading = `## Best Third-Place Ranking`;
     const rows = payload.thirdPlace.map((r) => ({ ...r, player: `${r.player} (${r.group})` }));
-    sections.push({ heading, content: `${heading}\n${renderTable(rows)}` });
+    sections.push({ heading, content: `${heading}\n${renderTable(rows)}`, channelEnv: "STANDINGS_CHANNEL_ID" });
+  }
+  if (Array.isArray(payload.overall) && payload.overall.length > 0) {
+    const heading = `## Overall Leaderboard`;
+    const rows = payload.overall.map((r) => ({ ...r, player: `${r.player} (${r.group})` }));
+    sections.push({ heading, content: `${heading}\n${renderTable(rows)}`, channelEnv: "OVERALL_CHANNEL_ID" });
   }
   return sections;
 }
@@ -72,20 +80,20 @@ export function registerStandingsWebhook(app) {
       return res.status(401).json({ error: "Invalid or missing X-Webhook-Secret header." });
     }
 
-    const channelId = process.env.STANDINGS_CHANNEL_ID;
-    if (!channelId) {
-      return res.status(503).json({ error: "STANDINGS_CHANNEL_ID is not configured on the server." });
-    }
-
     try {
       const sections = buildSections(req.body || {});
       if (sections.length === 0) {
-        return res.status(400).json({ error: "Payload had no groups[] or thirdPlace[] data." });
+        return res.status(400).json({ error: "Payload had no groups[]/thirdPlace[]/overall[] data." });
       }
       const client = await getDiscordClient();
       const results = [];
       for (const s of sections) {
-        results.push(await upsertSection(channelId, client.user.id, s.heading, s.content));
+        const channelId = process.env[s.channelEnv];
+        if (!channelId) {
+          results.push({ heading: s.heading, skipped: true, reason: `${s.channelEnv} is not configured` });
+          continue;
+        }
+        results.push({ heading: s.heading, ...(await upsertSection(channelId, client.user.id, s.heading, s.content)) });
       }
       res.json({ ok: true, results });
     } catch (err) {
